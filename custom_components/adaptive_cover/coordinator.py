@@ -125,8 +125,8 @@ class AdaptiveDataUpdateCoordinator(DataUpdateCoordinator[AdaptiveCoverData]):
 
     config_entry: ConfigEntry
 
-    def __init__(self, hass: HomeAssistant) -> None:  # noqa: D107
-        super().__init__(hass, LOGGER, name=DOMAIN)
+    def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:  # noqa: D107
+        super().__init__(hass, LOGGER, name=DOMAIN, config_entry=config_entry)
 
         self.logger = ConfigContextAdapter(_LOGGER)
         self.logger.set_config_name(self.config_entry.data.get("name"))
@@ -177,17 +177,20 @@ class AdaptiveDataUpdateCoordinator(DataUpdateCoordinator[AdaptiveCoverData]):
 
     async def async_timed_refresh(self, event) -> None:
         """Control state at end time."""
-
         now = dt.datetime.now()
-        if self.end_time is not None:
-            time = self.end_time
+        time = None
         if self.end_time_entity is not None:
             time = get_safe_state(self.hass, self.end_time_entity)
+        elif self.end_time is not None:
+            time = self.end_time
 
         self.logger.debug("Checking timed refresh. End time: %s, now: %s", time, now)
 
+        if time is None:
+            self.logger.debug("Timed refresh skipped: no end time configured")
+            return
         time_check = now - get_datetime_from_str(time)
-        if time is not None and (time_check <= dt.timedelta(seconds=1)):
+        if time_check <= dt.timedelta(seconds=1):
             self.timed_refresh = True
             self.logger.debug("Timed refresh triggered")
             await self.async_refresh()
@@ -481,15 +484,15 @@ class AdaptiveDataUpdateCoordinator(DataUpdateCoordinator[AdaptiveCoverData]):
     def get_blind_data(self, options):
         """Assign correct class for type of blind."""
         if self._cover_type == "cover_blind":
-            cover_data = AdaptiveVerticalCover(
+            return AdaptiveVerticalCover(
                 self.hass,
                 self.logger,
                 *self.pos_sun,
                 *self.common_data(options),
                 *self.vertical_data(options),
             )
-        if self._cover_type == "cover_awning":
-            cover_data = AdaptiveHorizontalCover(
+        elif self._cover_type == "cover_awning":
+            return AdaptiveHorizontalCover(
                 self.hass,
                 self.logger,
                 *self.pos_sun,
@@ -497,15 +500,15 @@ class AdaptiveDataUpdateCoordinator(DataUpdateCoordinator[AdaptiveCoverData]):
                 *self.vertical_data(options),
                 *self.horizontal_data(options),
             )
-        if self._cover_type == "cover_tilt":
-            cover_data = AdaptiveTiltCover(
+        elif self._cover_type == "cover_tilt":
+            return AdaptiveTiltCover(
                 self.hass,
                 self.logger,
                 *self.pos_sun,
                 *self.common_data(options),
                 *self.tilt_data(options),
             )
-        return cover_data
+        raise ValueError(f"Unknown cover type: {self._cover_type}")
 
     @property
     def check_adaptive_time(self):
@@ -533,7 +536,7 @@ class AdaptiveDataUpdateCoordinator(DataUpdateCoordinator[AdaptiveCoverData]):
             self.logger.debug(
                 "Start time: %s, now: %s, now >= time: %s", time, now, now >= time
             )
-            self._start_time
+            self._start_time = time
             return now >= time
         return True
 
@@ -677,12 +680,15 @@ class AdaptiveDataUpdateCoordinator(DataUpdateCoordinator[AdaptiveCoverData]):
     def climate_mode_data(self, options, cover_data):
         """Update climate mode data and control method."""
         climate = ClimateCoverData(*self.get_climate_data(options))
-        self.climate_state = round(ClimateCoverState(cover_data, climate).get_state())
-        climate_data = ClimateCoverState(cover_data, climate).climate_data
-        if climate_data.is_summer and self.switch_mode:
-            self.control_method = "summer"
-        if climate_data.is_winter and self.switch_mode:
-            self.control_method = "winter"
+        climate_cover = ClimateCoverState(cover_data, climate)
+        self.climate_state = round(climate_cover.get_state())
+        climate_data = climate_cover.climate_data
+        self.control_method = "intermediate"
+        if self.switch_mode:
+            if climate_data.is_summer:
+                self.control_method = "summer"
+            elif climate_data.is_winter:
+                self.control_method = "winter"
         self.logger.debug(
             "Climate mode control method was set to %s", self.control_method
         )
@@ -853,9 +859,12 @@ class AdaptiveCoverManager:
         else:
             new_position = new_state.attributes.get("current_position")
 
+        if new_position is None:
+            return
         if new_position != our_state:
             if (
                 manual_threshold is not None
+                and our_state is not None
                 and abs(our_state - new_position) < manual_threshold
             ):
                 self.logger.debug(
