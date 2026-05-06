@@ -7,13 +7,14 @@ import datetime as dt
 from dataclasses import dataclass
 
 import numpy as np
-import pytz
-from homeassistant.components.cover import DOMAIN as COVER_DOMAIN
+from homeassistant.components.cover import (
+    DOMAIN as COVER_DOMAIN,
+    SERVICE_SET_COVER_POSITION,
+    SERVICE_SET_COVER_TILT_POSITION,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     ATTR_ENTITY_ID,
-    SERVICE_SET_COVER_POSITION,
-    SERVICE_SET_COVER_TILT_POSITION,
 )
 from homeassistant.core import (
     Event,
@@ -23,7 +24,6 @@ from homeassistant.core import (
     callback,
 )
 from homeassistant.helpers.event import async_track_point_in_time
-from homeassistant.helpers.template import state_attr
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .config_context_adapter import ConfigContextAdapter
@@ -99,7 +99,7 @@ from .const import (
     DOMAIN,
     LOGGER,
 )
-from .helpers import get_datetime_from_str, get_last_updated, get_safe_state
+from .helpers import get_datetime_from_str, get_last_updated, get_safe_state, get_state_attr
 
 
 @dataclass
@@ -322,10 +322,10 @@ class AdaptiveDataUpdateCoordinator(DataUpdateCoordinator[AdaptiveCoverData]):
         if (
             self.first_refresh
             or self._sun_start_time is None
-            or dt.datetime.now(pytz.UTC).date() != self._sun_start_time.date()
+            or dt.datetime.now(dt.UTC).date() != self._sun_start_time.date()
         ):
             self.logger.debug("Calculating solar times")
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             start, end = await loop.run_in_executor(None, normal_cover.solar_times)
             self._sun_start_time = start
             self._sun_end_time = end
@@ -568,8 +568,8 @@ class AdaptiveDataUpdateCoordinator(DataUpdateCoordinator[AdaptiveCoverData]):
     def _get_current_position(self, entity) -> int | None:
         """Get current position of cover."""
         if self._cover_type == "cover_tilt":
-            return state_attr(self.hass, entity, "current_tilt_position")
-        return state_attr(self.hass, entity, "current_position")
+            return get_state_attr(self.hass, entity, "current_tilt_position")
+        return get_state_attr(self.hass, entity, "current_position")
 
     def check_position(self, entity, state):
         """Check if position is different as state."""
@@ -623,8 +623,8 @@ class AdaptiveDataUpdateCoordinator(DataUpdateCoordinator[AdaptiveCoverData]):
     def pos_sun(self):
         """Fetch information for sun position."""
         return [
-            state_attr(self.hass, "sun.sun", "azimuth"),
-            state_attr(self.hass, "sun.sun", "elevation"),
+            get_state_attr(self.hass, "sun.sun", "azimuth"),
+            get_state_attr(self.hass, "sun.sun", "elevation"),
         ]
 
     def common_data(self, options):
