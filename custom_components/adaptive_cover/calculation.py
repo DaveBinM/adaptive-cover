@@ -2,16 +2,15 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import numpy as np
 import pandas as pd
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.template import state_attr
 from numpy import cos, sin, tan
 from numpy import radians as rad
 
-from .helpers import get_domain, get_safe_state
+from .helpers import get_domain, get_safe_state, get_state_attr
 from .sun import SunData
 from .config_context_adapter import ConfigContextAdapter
 
@@ -143,10 +142,15 @@ class AdaptiveGeneralCover(ABC):
     @property
     def sunset_valid(self) -> bool:
         """Determine if it is after sunset plus offset."""
-        sunset = self.sun_data.sunset().replace(tzinfo=None)
-        sunrise = self.sun_data.sunrise().replace(tzinfo=None)
-        after_sunset = datetime.utcnow() > (sunset + timedelta(minutes=self.sunset_off))
-        before_sunrise = datetime.utcnow() < (
+        now = datetime.now(timezone.utc)
+        sunset = self.sun_data.sunset()
+        sunrise = self.sun_data.sunrise()
+        if sunset.tzinfo is None:
+            sunset = sunset.replace(tzinfo=timezone.utc)
+        if sunrise.tzinfo is None:
+            sunrise = sunrise.replace(tzinfo=timezone.utc)
+        after_sunset = now > (sunset + timedelta(minutes=self.sunset_off))
+        before_sunrise = now < (
             sunrise + timedelta(minutes=self.sunrise_off)
         )
         self.logger.debug(
@@ -262,7 +266,7 @@ class ClimateCoverData:
                 self.outside_entity,
             )
         elif self.weather_entity:
-            temp = state_attr(self.hass, self.weather_entity, "temperature")
+            temp = get_state_attr(self.hass, self.weather_entity, "temperature")
         return temp
 
     @property
@@ -275,7 +279,7 @@ class ClimateCoverData:
                     self.temp_entity,
                 )
             else:
-                temp = state_attr(self.hass, self.temp_entity, "current_temperature")
+                temp = get_state_attr(self.hass, self.temp_entity, "current_temperature")
             return temp
 
     @property

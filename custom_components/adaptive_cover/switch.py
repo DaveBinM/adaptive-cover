@@ -8,7 +8,7 @@ from homeassistant.components.switch import SwitchDeviceClass, SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_ON
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -169,7 +169,7 @@ class AdaptiveCoverSwitch(
                         entity, self.coordinator.state
                     )
         await self.coordinator.async_refresh()
-        self.schedule_update_ha_state()
+        self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the device off."""
@@ -180,7 +180,7 @@ class AdaptiveCoverSwitch(
             for entity in self.coordinator.manager.manual_controlled:
                 self.coordinator.manager.reset(entity)
         await self.coordinator.async_refresh()
-        self.schedule_update_ha_state()
+        self.async_write_ha_state()
 
     async def async_added_to_hass(self) -> None:
         """Call when entity about to be added to hass."""

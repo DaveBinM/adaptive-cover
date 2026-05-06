@@ -4,7 +4,7 @@ import datetime as dt
 
 import pandas as pd
 from dateutil import parser
-from homeassistant.core import HomeAssistant, split_entity_id
+from homeassistant.core import HomeAssistant
 
 
 def get_safe_state(hass: HomeAssistant, entity_id: str):
@@ -15,11 +15,18 @@ def get_safe_state(hass: HomeAssistant, entity_id: str):
     return state.state
 
 
+def get_state_attr(hass: HomeAssistant, entity_id: str, attribute: str):
+    """Get an attribute value from an entity state."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return None
+    return state.attributes.get(attribute)
+
+
 def get_domain(entity: str):
     """Get domain of entity."""
     if entity is not None:
-        domain, object_id = split_entity_id(entity)
-        return domain
+        return entity.split(".", 1)[0]
 
 
 def get_timedelta_str(string: str):
